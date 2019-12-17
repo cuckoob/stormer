@@ -1,5 +1,8 @@
 ### Pypi Upload
-
+```
+python -m pip install -i https://pypi.douban.com/simple setuptools wheel
+python -m pip install -i https://pypi.douban.com/simple twine
+```
 #### 1. 删除dist旧版本
 
 #### 2. 修改版本号
