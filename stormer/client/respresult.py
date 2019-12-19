@@ -8,7 +8,7 @@ from collections import namedtuple
 
 import requests
 
-from surge.utils.constants import UNKNOWN_ERROR, MSG, GONE_AWAY
+from stormer.utils.constants import UNKNOWN_ERROR, MSG, GONE_AWAY
 
 Resp = namedtuple("Resp", ["status_code", "code", "data", "msg"])
 

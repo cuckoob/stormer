@@ -9,7 +9,7 @@ import os
 from logging.handlers import RotatingFileHandler
 
 LOG_PATH = os.getenv("LOG_FILE_PATH", "/var/log/")
-LOG_FILE_NAME = os.getenv("LOG_FILE_NAME", "surge")
+LOG_FILE_NAME = os.getenv("LOG_FILE_NAME", "stormer")
 os.makedirs(LOG_PATH, exist_ok=True)
 
 log_file = os.path.join(LOG_PATH, '{}.log'.format(LOG_FILE_NAME))

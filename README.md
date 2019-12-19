@@ -6,7 +6,7 @@ this is a request tool which packaging method server
 ### Usage
 1. init requester
 ```python
-from surge import Requester
+from stormer import Requester
 requester = Requester(host="www.baidu.com")
 
 ```

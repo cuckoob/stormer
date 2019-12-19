@@ -19,16 +19,16 @@ CLASSIFIERS = [
     'Programming Language :: Python :: Implementation :: CPython',
 ]
 KEYWORDS = (
-    'surge', 'requester'
+    'stormer', 'requester'
 )
 
 setup(
-    name='surge',
+    name='stormer',
     version='0.0.1',
     maintainer='Murray',
     maintainer_email='murray.ma@qq.com',
-    url='https://github.com/murray88/surge/',
-    download_url='https://github.com/murray88/surge/',
+    url='https://github.com/murray88/stormer/',
+    download_url='https://github.com/murray88/stormer/',
     description=DESCRIPTION,
     long_description=LONG_DESCRIPTION,
     long_description_content_type="text/markdown",
@@ -41,6 +41,6 @@ setup(
     include_package_data=True,
     python_requires=">=3.5",
     install_requires=[
-        'requests==2.22.0',
+        'requests>=2.22.0',
     ],
 )

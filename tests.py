@@ -4,10 +4,10 @@ Created By Murray(m18527) on 2019/12/13 15:56
 """
 from __future__ import absolute_import, unicode_literals
 
-from surge import Requester
+from stormer import Requester
 
 if __name__ == '__main__':
-    requester = Requester(host="www.baidu.com")
+    requester = Requester("http://www.baidu.com")
 
     requester.register(action="get", func="bd_download", uri="download")
 

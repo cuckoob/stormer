@@ -35,7 +35,7 @@ def import_module(import_name):
         logger.error("Error, import module <{}> fail, Detail: {}".format(import_name, e))
 
 
-config_module = os.getenv("SURGE_CONFIG_MODULE", "surge.settings")
+config_module = os.getenv("SURGE_CONFIG_MODULE", "stormer.settings")
 
 
 class Config(dict):

@@ -16,18 +16,13 @@ logger = logging.getLogger(__name__)
 class Requester(object):
     """Requester is request Class which base on questions, it be used for send request."""
 
-    def __init__(self, host, port=80, protocol="http", headers=None, config_module=None):
+    def __init__(self, server_url, headers=None, config_module=None):
         """
         Init Requester
         :param config_module: config module
         """
-        self.host = host
-        self.port = port
         self.headers = headers
-        self.protocol = protocol
-        self.domain = "{}://{}".format(protocol, host)
-        if port and int(port) != 80:
-            self.domain = "{}:{}".format(self.domain, port)
+        self.server_url = server_url
         self.apis = []
 
         if config_module:
@@ -61,7 +56,7 @@ class Requester(object):
         action = action.upper()
         func_name = func_name.lower()
         assert func_name not in self.apis, u"Duplicate function <{}>.".format(func_name)
-        url = urljoin(self.domain, uri)
+        url = urljoin(self.server_url, uri)
         setattr(self, func_name, self._bind_func(url, action))
         self.apis.append(func_name)
         return getattr(self, func_name)
