@@ -80,8 +80,7 @@ class RespResult(object):
         return Resp(status_code=self.status_code, code=UNKNOWN_ERROR, data=None, msg=reason)
 
     def set_cache(self, timeout):
-        if not (self.redis_conn and timeout and self.params_hash) \
-                or not (self.req_action and self.req_action.upper() == "GET"):
+        if not (timeout and self.redis_conn and self.params_hash) or not str(self.req_action).upper() == "GET":
             return None
         meta_data = {
             "status": self.status,
