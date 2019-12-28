@@ -7,7 +7,7 @@ from __future__ import absolute_import, unicode_literals
 from stormer import Requester
 
 if __name__ == '__main__':
-    requester = Requester("http://www.baidu.com")
+    requester = Requester("http://www.baidu.com", redis_url="redis://127.0.0.1:6379/0", timeout=30 * 60)
 
     requester.register(action="get", func="bd_download", uri="download")
 

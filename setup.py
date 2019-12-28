@@ -19,12 +19,12 @@ CLASSIFIERS = [
     'Programming Language :: Python :: Implementation :: CPython',
 ]
 KEYWORDS = (
-    'stormer', 'requester'
+    'stormer', 'requester', 'redis'
 )
 
 setup(
     name='stormer',
-    version='0.0.1',
+    version='0.0.2',
     maintainer='Murray',
     maintainer_email='murray.ma@qq.com',
     url='https://github.com/murray-ma/stormer/',
@@ -42,5 +42,6 @@ setup(
     python_requires=">=3.5",
     install_requires=[
         'requests>=2.22.0',
+        'redis>=3.3.11',
     ],
 )

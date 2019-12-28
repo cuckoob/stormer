@@ -2,8 +2,10 @@
 """
 Created By Murray(m18527) on 2019/12/13 13:57
 """
+import json
 from urllib.parse import urljoin
 
+import redis
 import requests
 
 from .respresult import RespResult
@@ -16,14 +18,24 @@ logger = logging.getLogger(__name__)
 class Requester(object):
     """Requester is request Class which base on questions, it be used for send request."""
 
-    def __init__(self, server_url, headers=None, config_module=None):
+    def __init__(self, server_url, headers=None, config_module=None, redis_url=None, timeout=0):
         """
         Init Requester
         :param config_module: config module
         """
         self.headers = headers
         self.server_url = server_url
+        self.redis_url = redis_url
+        self.timeout = timeout
+        self.redis_conn = None
         self.apis = []
+
+        if self.redis_url:
+            try:
+                self.redis_conn = redis.Redis(connection_pool=redis.ConnectionPool.from_url(self.redis_url))
+            except ConnectionError:
+                logger.warning("Redis connection pool is max number of clients reached, now disconnect.")
+                self.redis_conn.connection_pool.disconnect()
 
         if config_module:
             try:
@@ -32,11 +44,27 @@ class Requester(object):
                 logger.error("Error: set config fail, Detail: {}".format(e))
 
     @staticmethod
+    def gen_md5(text, salt='_stormer_requester_'):
+        import hashlib
+        md = hashlib.md5()
+        md.update("{}{}".format(text, salt).encode("utf-8"))
+        res = md.hexdigest()
+        return res
+
+    @staticmethod
     def set_config_module(module):
         try:
             config.from_obj(module)
         except Exception as e:
             logger.error("Error: set config fail, Detail: {}".format(e))
+
+    @classmethod
+    def build_params_hash(cls, url, params, **kwargs):
+        new_params = {k: v for k, v in (params or {}).items()}
+        new_params.update({"url": url})
+        new_params.update(kwargs)
+        new_params = json.dumps(new_params, sort_keys=True)
+        return str(cls.gen_md5(new_params)).upper()
 
     @staticmethod
     def _path_url(url, path_params):
@@ -44,20 +72,27 @@ class Requester(object):
             url = url.format(**path_params)
         return url
 
-    def _bind_func(self, pre_url, action):
+    def _bind_func(self, pre_url, action, timeout=0):
         def req(path_params=None, params=None, data=None, json=None, files=None, headers=None, **kwargs):
             url = self._path_url(pre_url, path_params)
-            resp = self._do_request(action, url, params, data, json, files, headers, **kwargs)
-            return RespResult(resp, url, action)
+            params_hash, resp_result = None, None
+            if self.redis_conn and timeout:
+                params_hash = self.build_params_hash(url, params, **kwargs)
+                resp_result = RespResult.from_cache(params_hash, action, self.redis_conn)
+            if not resp_result:
+                resp = self._do_request(action, url, params, data, json, files, headers, **kwargs)
+                resp_result = RespResult(resp, url, action, redis_conn=self.redis_conn, params_hash=params_hash)
+                resp_result.set_cache(timeout)
+            return resp_result
 
         return req
 
-    def _add_path(self, action, uri, func_name):
+    def _add_path(self, action, uri, func_name, timeout=0):
         action = action.upper()
         func_name = func_name.lower()
-        assert func_name not in self.apis, u"Duplicate function <{}>.".format(func_name)
+        assert func_name not in self.apis, u"Duplicate function {}.".format(func_name)
         url = urljoin(self.server_url, uri)
-        setattr(self, func_name, self._bind_func(url, action))
+        setattr(self, func_name, self._bind_func(url, action, timeout=timeout))
         self.apis.append(func_name)
         return getattr(self, func_name)
 
@@ -69,9 +104,9 @@ class Requester(object):
             func_name = str(func)
         return func_name
 
-    def register(self, action, func, uri):
+    def register(self, action, func, uri, timeout=0):
         func_name = self._func_name(func)
-        return self._add_path(action, uri, func_name)
+        return self._add_path(action, uri, func_name, timeout=timeout or self.timeout)
 
     def _headers(self, headers):
         """combine headers"""
