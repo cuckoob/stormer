@@ -2,13 +2,13 @@
 """
 Created By Murray(m18527) on 2019/12/13 13:57
 """
+import logging
 from urllib.parse import urljoin
 
 import requests
 
 from .respresult import RespResult
 from ..utils.config import config
-from ..utils.logger import logging
 
 logger = logging.getLogger(__name__)
 
@@ -16,12 +16,13 @@ logger = logging.getLogger(__name__)
 class Requester(object):
     """Requester is request Class which base on questions, it be used for send request."""
 
-    def __init__(self, server_url, headers=None, config_module=None):
+    def __init__(self, server_url, headers=None, proxies=None, config_module=None):
         """
         Init Requester
         :param config_module: config module
         """
         self.headers = headers
+        self.proxies = proxies or {"http": None, "https": None}
         self.server_url = server_url
         self.apis = []
 
@@ -45,9 +46,9 @@ class Requester(object):
         return url
 
     def _bind_func(self, pre_url, action):
-        def req(path_params=None, params=None, data=None, json=None, files=None, headers=None, **kwargs):
+        def req(path_params=None, params=None, data=None, json=None, files=None, **kwargs):
             url = self._path_url(pre_url, path_params)
-            resp = self._do_request(action, url, params, data, json, files, headers, **kwargs)
+            resp = self._do_request(action, url, params, data, json, files, **kwargs)
             return RespResult(resp, url, action)
 
         return req
@@ -85,47 +86,60 @@ class Requester(object):
             headers = self.headers
         return headers
 
-    def _do_request(self, action, url, params=None, data=None, json=None, files=None, headers=None, **kwargs):
-        headers = self._headers(headers)
+    def _proxies(self, proxies):
+        """combine proxies"""
+        if proxies and isinstance(proxies, dict):
+            if self.proxies:
+                for key, value in self.headers.items():
+                    if key in proxies:
+                        continue
+                    proxies[key] = value
+        else:
+            proxies = self.proxies
+        return proxies
+
+    def _do_request(self, action, url, params=None, data=None, json=None, files=None, **kwargs):
+        kwargs["headers"] = self._headers(kwargs.get("headers"))
+        kwargs["proxies"] = self._proxies(kwargs.get("proxies"))
         if action.upper() == "GET":
-            return self.get(url, params=params, headers=headers, **kwargs)
+            return self.get(url, params=params, **kwargs)
         if action.upper() == "POST":
-            return self.post(url, data=data, json=json, files=files, headers=headers, **kwargs)
+            return self.post(url, data=data, json=json, files=files, **kwargs)
         if action.upper() == "PUT":
-            return self.put(url, data=data, json=json, files=files, headers=headers, **kwargs)
+            return self.put(url, data=data, json=json, files=files, **kwargs)
         if action.upper() == "DELETE":
-            return self.delete(url, headers=headers, **kwargs)
+            return self.delete(url, **kwargs)
         if action.upper() == "OPTIONS":
-            return self.options(url, headers=headers, **kwargs)
+            return self.options(url, **kwargs)
 
     @staticmethod
-    def get(url, params=None, headers=None, **kwargs):
+    def get(url, params=None, **kwargs):
         assert url, u"url不能为空."
         assert (not params or isinstance(params, dict)), u"params参数类型错误."
-        return requests.get(url, params=params, headers=headers, **kwargs)
+        return requests.get(url, params=params, **kwargs)
 
     @staticmethod
-    def post(url, data=None, json=None, files=None, headers=None, **kwargs):
+    def post(url, data=None, json=None, **kwargs):
         assert url, u"url不能为空."
         assert (not data or isinstance(data, dict)), u"data参数类型错误."
         assert (not json or isinstance(json, dict)), u"json参数类型错误."
-        assert (not files or isinstance(files, (list, tuple, dict))), u"files参数类型错误."
-        return requests.post(url, data=data, json=json, files=files, headers=headers, **kwargs)
+        assert (not kwargs.get("files") or isinstance(kwargs.get("files"), (list, tuple, dict))), u"files参数类型错误."
+        return requests.post(url, data=data, json=json, **kwargs)
 
     @staticmethod
-    def put(url, data=None, json=None, files=None, headers=None, **kwargs):
+    def put(url, data=None, **kwargs):
         assert url, u"url不能为空."
         assert (not data or isinstance(data, dict)), u"data参数类型错误."
-        assert (not json or isinstance(json, dict)), u"json参数类型错误."
-        assert (not files or isinstance(files, (list, tuple, dict))), u"files参数类型错误."
-        return requests.put(url, data=data, json=json, files=files, headers=headers, **kwargs)
+        assert (not kwargs.get("json") or isinstance(kwargs.get("json"), dict)), u"json参数类型错误."
+        assert (not kwargs.get("files") or isinstance(kwargs.get("files"), (list, tuple, dict))), u"files参数类型错误."
+        return requests.put(url, data=data, **kwargs)
 
     @staticmethod
-    def delete(url, headers=None, **kwargs):
+    def delete(url, **kwargs):
         assert url, u"url不能为空."
-        return requests.delete(url, headers=headers, **kwargs)
+        return requests.delete(url, **kwargs)
 
     @staticmethod
-    def options(url, headers=None, **kwargs):
+    def options(url, **kwargs):
         assert url, u"url不能为空."
-        return requests.options(url, headers=headers, **kwargs)
+        return requests.options(url, **kwargs)

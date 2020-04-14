@@ -4,10 +4,10 @@ Created By Murray(m18527) on 2019/12/13 13:57
 """
 from __future__ import absolute_import, unicode_literals
 
+import logging
 import os
 import sys
 
-from .logger import logging
 
 logger = logging.getLogger(__name__)
 
