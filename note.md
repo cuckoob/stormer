@@ -9,7 +9,7 @@ python -m pip install -i https://pypi.douban.com/simple twine
 ```bash
 vim setup.py
 # or
-sed -i "s/version='[0-9\.]*'/version='1.0.2'/g" setup.py
+sed -i "s/version='[0-9\.]*'/version='0.0.2'/g" setup.py
 ```
 
 #### 3. 打包新版本build
