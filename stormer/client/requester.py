@@ -2,8 +2,8 @@
 """
 Created By Murray(m18527) on 2019/12/13 13:57
 """
-import logging
 import json
+import logging
 from urllib.parse import urljoin
 
 import redis
