@@ -14,6 +14,8 @@ from ..utils.config import config
 
 logger = logging.getLogger(__name__)
 
+VERSION = "0.0.2"
+
 
 class Requester(object):
     """Requester is request Class which base on questions, it be used for send request."""

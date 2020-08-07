@@ -1,6 +1,7 @@
 import os
-
 from setuptools import find_packages, setup
+
+import stormer
 
 with open(os.path.join(os.path.dirname(__file__), 'README.md'), "r", encoding='utf-8') as fh:
     LONG_DESCRIPTION = fh.read()
@@ -24,11 +25,11 @@ KEYWORDS = (
 
 setup(
     name='stormer',
-    version='0.0.2',
+    version=stormer.__version__,
     maintainer='Murray',
-    maintainer_email='murray.ma@qq.com',
-    url='https://github.com/murray-ma/stormer/',
-    download_url='https://github.com/murray-ma/stormer/',
+    maintainer_email='sunglowrise@qq.com',
+    url='https://github.com/sunglowrise/stormer/',
+    download_url='https://github.com/sunglowrise/stormer/',
     description=DESCRIPTION,
     long_description=LONG_DESCRIPTION,
     long_description_content_type="text/markdown",
