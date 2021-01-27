@@ -7,16 +7,26 @@ this is a request tool which packaging method server
 1. init requester
 ```python
 from stormer import Requester
-requester = Requester(host="www.baidu.com")
-# or
-requester = Requester("http://www.baidu.com", redis_url="redis://127.0.0.1:6379/0", timeout=30 * 60)
+
+requester = Requester(
+    "http://www.baidu.com", 
+    redis_url="redis://127.0.0.1:6379/0", 
+    redis_nodes="127.0.0.1:7000,127.0.0.1:7001,127.0.0.1:7002", 
+    redis_password="",
+    timeout=30 * 60
+)
 # timeout: global cache timeout
 
 ```
 
 2. register method
 ```python
-requester.register(action="get", func="bd_download", uri="download", timeout=30 * 60)
+requester.register(
+    action="get", 
+    func="bd_download", 
+    uri="/", 
+    timeout=30 * 60
+)
 # timeout: this requester cache timeout
 
 ```

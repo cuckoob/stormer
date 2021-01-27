@@ -1,0 +1,287 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+"""
+Created By Murray(m18527) on 2019/12/13 13:57
+"""
+import json
+import logging
+from collections import namedtuple
+from urllib.parse import urljoin
+
+import requests
+
+from .constants import MSG, UNKNOWN_ERROR, GONE_AWAY
+from .redis_utils import get_redis_cache
+
+logger = logging.getLogger(__name__)
+
+VERSION = "0.0.3"
+
+DEBUG = False
+
+Resp = namedtuple("Resp", ["status_code", "code", "data", "msg"])
+
+META_CACHE_KEY = "REQUESTER:META:{PARAMS_HASH}"
+CONTENT_CACHE_KEY = "REQUESTER:CONTENT:{PARAMS_HASH}"
+
+
+class RespResult(object):
+    """
+    Used for packing request response
+    """
+
+    def __init__(self, resp=None, url=None, action=None, params_hash=None, redis_cache=None):
+        if resp and not isinstance(resp, requests.Response):
+            raise Exception("Param<resp> should be object of requests.Response, but {} found.".format(type(resp)))
+        self.resp = resp
+        self.status = None
+        self.reason = None
+        self.content = None
+        self.headers = None
+        self.encoding = None
+        self.status_code = None
+        self.url = url
+        self.action = action
+        self.params_hash = params_hash
+        self.redis_cache = redis_cache
+        self._init()
+
+    def _init(self):
+        if not self.resp:
+            return
+        self.status = self.resp.ok
+        self.reason = self.resp.reason
+        self.content = self.resp.content
+        self.headers = self.resp.headers.__repr__()
+        self.encoding = self.resp.encoding
+        self.status_code = self.resp.status_code
+
+    @property
+    def bytes(self):
+        return self.content
+
+    @property
+    def text(self):
+        return self.resp.text
+
+    @property
+    def json(self):
+        return self.resp.json
+
+    @property
+    def json_resp(self):
+        """parse resp to api resp"""
+        if not self.resp:
+            return Resp(status_code=400, code=UNKNOWN_ERROR, data=None, msg=MSG[UNKNOWN_ERROR])
+        if 200 <= self.status_code < 300:
+            code = (self.json or {}).get("code", GONE_AWAY)
+            if code:
+                return Resp(status_code=self.status_code, code=code, data=None, msg=(self.json or {}).get("message"))
+            return Resp(status_code=self.status_code, code=code, data=self.json, msg=MSG.get(code))
+        if isinstance(self.reason, bytes):
+            try:
+                reason = self.reason.decode('utf-8')
+            except UnicodeDecodeError:
+                reason = self.reason.decode('iso-8859-1')
+        else:
+            reason = self.reason
+        return Resp(status_code=self.status_code, code=UNKNOWN_ERROR, data=None, msg=reason)
+
+    def set_cache(self, timeout):
+        if not (timeout and self.redis_cache and self.params_hash) or not str(self.action).upper() == "GET":
+            return None
+        meta_data = {
+            "status": self.status,
+            "reason": self.reason,
+            "headers": self.headers,
+            "encoding": self.encoding,
+            "status_code": self.status_code,
+            "url": self.url,
+            "action": self.action,
+        }
+        meta_key = META_CACHE_KEY.format(PARAMS_HASH=self.params_hash)
+        content_key = CONTENT_CACHE_KEY.format(PARAMS_HASH=self.params_hash)
+        self.redis_cache.set(meta_key, json.dumps(meta_data), ex=timeout)
+        self.redis_cache.set(content_key, self.content, ex=timeout)
+
+    @classmethod
+    def from_cache(cls, params_hash, action, redis_conn):
+        if not (redis_conn and action and action.upper() == "GET"):
+            return None
+        meta_key = META_CACHE_KEY.format(PARAMS_HASH=params_hash)
+        content_key = CONTENT_CACHE_KEY.format(PARAMS_HASH=params_hash)
+        meta_data = redis_conn.get(meta_key)
+        content = redis_conn.get(content_key)
+        if not (meta_data and content):
+            return None
+        result = cls()
+        for key, value in json.loads(meta_data).items():
+            setattr(result, key, value)
+        setattr(result, "content", content)
+        return result
+
+
+class Requester(object):
+    """Requester is request Class which base on questions, it be used for send request."""
+    debug = False
+
+    @staticmethod
+    def set_debugging():
+        if not Requester.debug:
+            global logger
+            logger = logging.getLogger("nacos")
+            handler = logging.StreamHandler()
+            handler.setFormatter(logging.Formatter(
+                "%(asctime)s.%(msecs)d - %(levelname)-8s - [%(filename)s:%(lineno)d][%(funcName)s] - %(message)s"))
+            logger.addHandler(handler)
+            logger.setLevel(logging.DEBUG)
+            Requester.debug = True
+
+    def __init__(self, server_url, headers=None, proxies=None,
+                 redis_url=None, redis_nodes=None, redis_password='', timeout=0):
+        """
+        Init Requester
+        :param server_url string 'https://xxx.com'
+        :param headers dict {'Content-Type': 'application/json'}
+        :param proxies dict {"http": None, "https": None}
+        :param redis_url string 'redis://:<password>@<host>:<port>/<db>'
+        :param redis_nodes string 'ip:port,ip:port'
+        :param redis_password string  'redis password'
+        """
+        self.headers = headers
+        self.proxies = proxies or {"http": None, "https": None}
+        self.server_url = server_url
+        self.redis_url = redis_url
+        self.redis_nodes = redis_nodes
+        self.redis_password = redis_password
+        self.timeout = timeout
+        self.cache = None
+        self.apis = []
+
+        if self.redis_url or self.redis_nodes:
+            self.cache = get_redis_cache(redis_url=redis_url, redis_nodes=redis_nodes, password=self.redis_password)
+
+    @staticmethod
+    def gen_md5(text, salt='_stormer_requester_'):
+        import hashlib
+        md = hashlib.md5()
+        md.update("{}{}".format(text, salt).encode("utf-8"))
+        res = md.hexdigest()
+        return res
+
+    @classmethod
+    def build_params_hash(cls, url, params, **kwargs):
+        new_params = {k: v for k, v in (params or {}).items()}
+        new_params.update({"url": url})
+        new_params.update(kwargs)
+        new_params = json.dumps(new_params, sort_keys=True)
+        return str(cls.gen_md5(new_params)).upper()
+
+    @staticmethod
+    def _path_url(url, path_params):
+        if path_params and isinstance(path_params, dict):
+            url = url.format(**path_params)
+        return url
+
+    def _bind_func(self, pre_url, action, timeout=0):
+        def req(path_params=None, params=None, data=None, json=None, files=None, **kwargs):
+            url = self._path_url(pre_url, path_params)
+            params_hash, resp_result = None, None
+            if self.cache and timeout:
+                params_hash = self.build_params_hash(url, params, **kwargs)
+                resp_result = RespResult.from_cache(params_hash, action, self.cache)
+            if not resp_result:
+                resp = self._do_request(action, url, params, data, json, files, **kwargs)
+                resp_result = RespResult(resp, url, action, redis_cache=self.cache, params_hash=params_hash)
+                resp_result.set_cache(timeout)
+            return resp_result
+
+        return req
+
+    def _add_path(self, action, uri, func_name, timeout=0):
+        action = action.upper()
+        func_name = func_name.lower()
+        assert func_name not in self.apis, u"Duplicate function {}.".format(func_name)
+        url = urljoin(self.server_url, uri)
+        setattr(self, func_name, self._bind_func(url, action, timeout=timeout))
+        self.apis.append(func_name)
+        return getattr(self, func_name)
+
+    @staticmethod
+    def _func_name(func):
+        try:
+            func_name = func.__name__
+        except (Exception,):
+            func_name = str(func)
+        return func_name
+
+    def register(self, action, func, uri, timeout=0):
+        func_name = self._func_name(func)
+        return self._add_path(action, uri, func_name, timeout=timeout or self.timeout)
+
+    def _headers(self, headers):
+        """combine headers"""
+        if headers and isinstance(headers, dict):
+            if self.headers:
+                for key, value in self.headers.items():
+                    if key in headers:
+                        continue
+                    headers[key] = value
+        else:
+            headers = self.headers
+        return headers
+
+    def _proxies(self, proxies):
+        """combine proxies"""
+        if proxies and isinstance(proxies, dict):
+            if self.proxies:
+                for key, value in self.headers.items():
+                    if key in proxies:
+                        continue
+                    proxies[key] = value
+        else:
+            proxies = self.proxies
+        return proxies
+
+    def _do_request(self, action, url, params=None, data=None, json=None, files=None, **kwargs):
+        kwargs["headers"] = self._headers(kwargs.get("headers"))
+        kwargs["proxies"] = self._proxies(kwargs.get("proxies"))
+        if action.upper() == "GET":
+            return self.get(url, params=params, **kwargs)
+        if action.upper() == "POST":
+            return self.post(url, data=data, json=json, files=files, **kwargs)
+        if action.upper() == "PUT":
+            return self.put(url, data=data, json=json, files=files, **kwargs)
+        if action.upper() == "DELETE":
+            return self.delete(url, **kwargs)
+        if action.upper() == "OPTIONS":
+            return self.options(url, **kwargs)
+
+    @staticmethod
+    def get(url, params=None, **kwargs):
+        assert url, "request url can't be blank."
+        return requests.get(url, params=params, **kwargs)
+
+    @staticmethod
+    def post(url, data=None, json=None, **kwargs):
+        assert url, "request url can't be blank."
+        return requests.post(url, data=data, json=json, **kwargs)
+
+    @staticmethod
+    def put(url, data=None, **kwargs):
+        assert url, "request url can't be blank."
+        return requests.put(url, data=data, **kwargs)
+
+    @staticmethod
+    def delete(url, **kwargs):
+        assert url, "request url can't be blank."
+        return requests.delete(url, **kwargs)
+
+    @staticmethod
+    def options(url, **kwargs):
+        assert url, "request url can't be blank."
+        return requests.options(url, **kwargs)
+
+
+if DEBUG:
+    Requester.set_debugging()

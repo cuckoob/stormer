@@ -29,3 +29,4 @@ venv.bak/
 
 .idea/
 *.egg-info
+note.md

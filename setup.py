@@ -1,4 +1,5 @@
 import os
+
 from setuptools import find_packages, setup
 
 import stormer
@@ -7,8 +8,9 @@ with open(os.path.join(os.path.dirname(__file__), 'README.md'), "r", encoding='u
     LONG_DESCRIPTION = fh.read()
 
 DESCRIPTION = (
-    'this is a requester'
+    'this is a requester for requests.'
 )
+
 CLASSIFIERS = [
     'Programming Language :: Python',
     'Intended Audience :: Developers',
@@ -19,9 +21,9 @@ CLASSIFIERS = [
     'Programming Language :: Python :: 3.7',
     'Programming Language :: Python :: Implementation :: CPython',
 ]
-KEYWORDS = (
-    'stormer', 'requester', 'redis'
-)
+KEYWORDS = [
+    'stormer', 'requester', 'redis', 'requests'
+]
 
 setup(
     name='stormer',
@@ -44,5 +46,6 @@ setup(
     install_requires=[
         'requests>=2.22.0',
         'redis>=3.3.11',
+        'redis-py-cluster==2.1.0'
     ],
 )
