@@ -14,7 +14,7 @@ class TestClient(unittest.TestCase):
         requester = Requester(
             server_url="https://www.baidu.com",
             # redis_url="redis://127.0.0.1:6379/0",
-            # timeout=30, # in seconds
+            # timeout=30,  # in seconds
             # headers={"Content-Type": "text/html;charset=utf8"},
             encoding='utf8'
         )

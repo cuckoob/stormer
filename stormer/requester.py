@@ -16,7 +16,7 @@ from .redis_utils import get_redis_cache
 
 logger = logging.getLogger(__name__)
 
-VERSION = "0.0.4"
+VERSION = "0.0.5"
 
 DEBUG = os.getenv("DEBUG", False)
 
@@ -35,7 +35,7 @@ class RespResult(object):
         if response and not isinstance(response, requests.Response):
             raise Exception("Param<resp> should be object of requests.Response, but {} found.".format(type(response)))
         self.response = response
-        self.status = None
+        self.ok = None
         self.reason = None
         self.content = None
         self.headers = None
@@ -53,7 +53,7 @@ class RespResult(object):
         if self.encoding:
             self.response.encoding = self.encoding
         self.encoding = self.response.encoding
-        self.status = self.response.ok
+        self.ok = self.response.ok
         self.reason = self.response.reason
         self.content = self.response.content
         self.text = self.response.text
@@ -106,7 +106,7 @@ class RespResult(object):
         if not (timeout > 0 and self.redis_cache and self.params_hash) or not str(self.action).upper() == "GET":
             return None
         meta_data = {
-            "status": self.status,
+            "ok": self.ok,
             "reason": self.reason,
             "text": self.text,
             "headers": self.headers,
