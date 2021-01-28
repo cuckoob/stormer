@@ -10,17 +10,26 @@ from stormer import Requester
 
 class TestClient(unittest.TestCase):
     def test_get_server(self):
+        # init Requester instance
         requester = Requester(
-            server_url="http://www.baidu.com",
+            server_url="https://www.baidu.com",
             # redis_url="redis://127.0.0.1:6379/0",
-            timeout=30 * 60
+            # timeout=30, # in seconds
+            # headers={"Content-Type": "text/html;charset=utf8"},
+            encoding='utf8'
         )
 
-        requester.register(action="get", func="bd_download", uri="/")
+        # register request function
+        requester.register(
+            action="get",
+            func="bd_index",
+            uri="/"
+        )
 
-        rlt = requester.bd_download()
-        r_byte = rlt.bytes
-        print(r_byte)
+        # execute function
+        rlt = requester.bd_index()
+        # print(rlt.data)
+        print(rlt.resp)
 
         self.assertEqual(rlt.status_code, 200)
 

@@ -3,23 +3,23 @@
 """
 Created By Murray(m18527) on 2019/12/13 13:57
 """
-import json
+import json as _json
 import logging
 from collections import namedtuple
 from urllib.parse import urljoin
 
+import chardet
 import requests
 
-from .constants import MSG, UNKNOWN_ERROR, GONE_AWAY
 from .redis_utils import get_redis_cache
 
 logger = logging.getLogger(__name__)
 
-VERSION = "0.0.3"
+VERSION = "0.0.4"
 
 DEBUG = False
 
-Resp = namedtuple("Resp", ["status_code", "code", "data", "msg"])
+Resp = namedtuple("Resp", ["status_code", "content", "reason"])
 
 META_CACHE_KEY = "REQUESTER:META:{PARAMS_HASH}"
 CONTENT_CACHE_KEY = "REQUESTER:CONTENT:{PARAMS_HASH}"
@@ -30,15 +30,15 @@ class RespResult(object):
     Used for packing request response
     """
 
-    def __init__(self, resp=None, url=None, action=None, params_hash=None, redis_cache=None):
-        if resp and not isinstance(resp, requests.Response):
-            raise Exception("Param<resp> should be object of requests.Response, but {} found.".format(type(resp)))
-        self.resp = resp
+    def __init__(self, response=None, url=None, action=None, params_hash=None, redis_cache=None, encoding=None):
+        if response and not isinstance(response, requests.Response):
+            raise Exception("Param<resp> should be object of requests.Response, but {} found.".format(type(response)))
+        self.response = response
         self.status = None
         self.reason = None
         self.content = None
         self.headers = None
-        self.encoding = None
+        self.encoding = encoding
         self.status_code = None
         self.url = url
         self.action = action
@@ -47,52 +47,67 @@ class RespResult(object):
         self._init()
 
     def _init(self):
-        if not self.resp:
+        if not self.response:
             return
-        self.status = self.resp.ok
-        self.reason = self.resp.reason
-        self.content = self.resp.content
-        self.headers = self.resp.headers.__repr__()
-        self.encoding = self.resp.encoding
-        self.status_code = self.resp.status_code
+        if self.encoding:
+            self.response.encoding = self.encoding
+        self.encoding = self.response.encoding
+        self.status = self.response.ok
+        self.reason = self.response.reason
+        self.content = self.response.content
+        self.text = self.response.text
+        self.headers = self.response.headers.__repr__()
+
+        self.status_code = self.response.status_code
+
+    @staticmethod
+    def guest_encoding(text):
+        """The apparent encoding, provided by the chardet library."""
+        return chardet.detect(text)['encoding']
 
     @property
     def bytes(self):
         return self.content
 
     @property
-    def text(self):
-        return self.resp.text
-
-    @property
     def json(self):
-        return self.resp.json
+        return self.response.json()
 
     @property
-    def json_resp(self):
-        """parse resp to api resp"""
-        if not self.resp:
-            return Resp(status_code=400, code=UNKNOWN_ERROR, data=None, msg=MSG[UNKNOWN_ERROR])
+    def data(self):
+        try:
+            _data = self.json
+        except (Exception,):
+            _data = self.text
+            if not _data:
+                _data = self.bytes
+        return _data
+
+    @property
+    def resp(self):
+        """
+        parse resp to api resp
+        """
+        if not self.response:
+            return Resp(status_code=400, content=None, reason=None)
         if 200 <= self.status_code < 300:
-            code = (self.json or {}).get("code", GONE_AWAY)
-            if code:
-                return Resp(status_code=self.status_code, code=code, data=None, msg=(self.json or {}).get("message"))
-            return Resp(status_code=self.status_code, code=code, data=self.json, msg=MSG.get(code))
+            return Resp(status_code=self.status_code, content=self.data, reason=None)
         if isinstance(self.reason, bytes):
             try:
-                reason = self.reason.decode('utf-8')
+                reason = self.reason.decode(self.encoding or self.guest_encoding(self.reason))
             except UnicodeDecodeError:
                 reason = self.reason.decode('iso-8859-1')
         else:
             reason = self.reason
-        return Resp(status_code=self.status_code, code=UNKNOWN_ERROR, data=None, msg=reason)
+        return Resp(status_code=self.status_code, content=self.data, reason=reason)
 
     def set_cache(self, timeout):
-        if not (timeout and self.redis_cache and self.params_hash) or not str(self.action).upper() == "GET":
+        if not (timeout > 0 and self.redis_cache and self.params_hash) or not str(self.action).upper() == "GET":
             return None
         meta_data = {
             "status": self.status,
             "reason": self.reason,
+            "text": self.text,
             "headers": self.headers,
             "encoding": self.encoding,
             "status_code": self.status_code,
@@ -101,7 +116,7 @@ class RespResult(object):
         }
         meta_key = META_CACHE_KEY.format(PARAMS_HASH=self.params_hash)
         content_key = CONTENT_CACHE_KEY.format(PARAMS_HASH=self.params_hash)
-        self.redis_cache.set(meta_key, json.dumps(meta_data), ex=timeout)
+        self.redis_cache.set(meta_key, _json.dumps(meta_data), ex=timeout)
         self.redis_cache.set(content_key, self.content, ex=timeout)
 
     @classmethod
@@ -115,7 +130,7 @@ class RespResult(object):
         if not (meta_data and content):
             return None
         result = cls()
-        for key, value in json.loads(meta_data).items():
+        for key, value in _json.loads(meta_data).items():
             setattr(result, key, value)
         setattr(result, "content", content)
         return result
@@ -137,7 +152,7 @@ class Requester(object):
             logger.setLevel(logging.DEBUG)
             Requester.debug = True
 
-    def __init__(self, server_url, headers=None, proxies=None,
+    def __init__(self, server_url, headers=None, proxies=None, encoding=None,
                  redis_url=None, redis_nodes=None, redis_password='', timeout=0):
         """
         Init Requester
@@ -155,6 +170,7 @@ class Requester(object):
         self.redis_nodes = redis_nodes
         self.redis_password = redis_password
         self.timeout = timeout
+        self.encoding = encoding
         self.cache = None
         self.apis = []
 
@@ -174,7 +190,7 @@ class Requester(object):
         new_params = {k: v for k, v in (params or {}).items()}
         new_params.update({"url": url})
         new_params.update(kwargs)
-        new_params = json.dumps(new_params, sort_keys=True)
+        new_params = _json.dumps(new_params, sort_keys=True)
         return str(cls.gen_md5(new_params)).upper()
 
     @staticmethod
@@ -187,12 +203,13 @@ class Requester(object):
         def req(path_params=None, params=None, data=None, json=None, files=None, **kwargs):
             url = self._path_url(pre_url, path_params)
             params_hash, resp_result = None, None
-            if self.cache and timeout:
+            if self.cache and timeout > 0:
                 params_hash = self.build_params_hash(url, params, **kwargs)
                 resp_result = RespResult.from_cache(params_hash, action, self.cache)
             if not resp_result:
                 resp = self._do_request(action, url, params, data, json, files, **kwargs)
-                resp_result = RespResult(resp, url, action, redis_cache=self.cache, params_hash=params_hash)
+                resp_result = RespResult(
+                    resp, url, action, redis_cache=self.cache, params_hash=params_hash, encoding=self.encoding)
                 resp_result.set_cache(timeout)
             return resp_result
 
