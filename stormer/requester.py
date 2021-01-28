@@ -275,6 +275,8 @@ class Requester(object):
             return requests.delete(url, **kwargs)
         elif action.upper() == "OPTIONS":
             return requests.options(url, **kwargs)
+        else:
+            raise Exception("Not Support %s." % action.upper())
 
 
 if DEBUG:
