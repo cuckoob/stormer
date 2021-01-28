@@ -16,7 +16,7 @@ from .redis_utils import get_redis_cache
 
 logger = logging.getLogger(__name__)
 
-VERSION = "0.1.0"
+VERSION = "0.1.1"
 
 DEBUG = os.getenv("DEBUG", False)
 
@@ -32,8 +32,10 @@ class RespResult(object):
     """
 
     def __init__(self, response=None, url=None, action=None, params_hash=None, redis_cache=None, encoding=None):
-        if response and not isinstance(response, requests.Response):
-            raise Exception("Param<resp> should be object of requests.Response, but {} found.".format(type(response)))
+        if not isinstance(response, requests.Response):
+            msg = "Param <response> should be object of requests.Response, but {} found.".format(type(response))
+            logger.warning(msg)
+            raise Exception(msg)
         self.response = response
         self.ok = None
         self.reason = None
@@ -48,8 +50,6 @@ class RespResult(object):
         self._init()
 
     def _init(self):
-        if not self.response:
-            return
         if self.encoding:
             self.response.encoding = self.encoding
         self.encoding = self.response.encoding
@@ -89,8 +89,6 @@ class RespResult(object):
         """
         parse resp to api resp
         """
-        if not self.response:
-            return Resp(status_code=400, content=None, reason=None)
         if 200 <= self.status_code < 300:
             return Resp(status_code=self.status_code, content=self.data, reason=None)
         if isinstance(self.reason, bytes):
@@ -100,10 +98,13 @@ class RespResult(object):
                 reason = self.reason.decode('iso-8859-1')
         else:
             reason = self.reason
+        logger.error("The request failed, http status code: {status}, content: {content}, reason: {reason}".format(
+            status=self.status_code, content=self.data, reason=self.reason))
         return Resp(status_code=self.status_code, content=self.data, reason=reason)
 
     def set_cache(self, timeout):
-        if not (timeout > 0 and self.redis_cache and self.params_hash) or not str(self.action).upper() == "GET":
+        if not (timeout > 0 and self.redis_cache and self.params_hash) \
+                or not str(self.action).upper() == "GET":
             return None
         meta_data = {
             "ok": self.ok,
@@ -134,6 +135,7 @@ class RespResult(object):
         for key, value in _json.loads(meta_data).items():
             setattr(result, key, value)
         setattr(result, "content", content)
+        logger.debug("Fetch data from the cache by hash {}.".format(params_hash))
         return result
 
 
@@ -145,10 +147,10 @@ class Requester(object):
     def set_debugging():
         if not Requester.debug:
             global logger
-            logger = logging.getLogger("nacos")
+            logger = logging.getLogger("requester")
             handler = logging.StreamHandler()
             handler.setFormatter(logging.Formatter(
-                "%(asctime)s.%(msecs)d - %(levelname)-8s - [%(filename)s:%(lineno)d][%(funcName)s] - %(message)s"))
+                "%(asctime)s - [%(levelname)s] [%(filename)s:%(lineno)d] - %(message)s"))
             logger.addHandler(handler)
             logger.setLevel(logging.DEBUG)
             Requester.debug = True
@@ -223,6 +225,7 @@ class Requester(object):
         url = urljoin(self.server_url, uri)
         setattr(self, func_name, self._bind_func(url, action, timeout=timeout))
         self.apis.append(func_name)
+        logger.debug("Requester register method: {method}, path: {url}".format(method=func_name, url=url))
         return getattr(self, func_name)
 
     @staticmethod
@@ -276,7 +279,9 @@ class Requester(object):
         elif action.upper() == "OPTIONS":
             return requests.options(url, **kwargs)
         else:
-            raise Exception("Not Support %s." % action.upper())
+            msg = "Not Support %s." % action.upper()
+            logger.error(msg)
+            raise Exception(msg)
 
 
 if DEBUG:

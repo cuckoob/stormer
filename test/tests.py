@@ -19,6 +19,9 @@ class TestClient(unittest.TestCase):
             encoding='utf8'
         )
 
+        # open debug
+        requester.set_debugging()
+
         # register request function
         requester.register(
             action="get",
