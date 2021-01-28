@@ -16,7 +16,7 @@ from .redis_utils import get_redis_cache
 
 logger = logging.getLogger(__name__)
 
-VERSION = "0.0.5"
+VERSION = "0.1.0"
 
 DEBUG = os.getenv("DEBUG", False)
 
@@ -95,7 +95,7 @@ class RespResult(object):
             return Resp(status_code=self.status_code, content=self.data, reason=None)
         if isinstance(self.reason, bytes):
             try:
-                reason = self.reason.decode(self.encoding or self.guest_encoding(self.reason))
+                reason = self.reason.decode(self.encoding or "utf-8")
             except UnicodeDecodeError:
                 reason = self.reason.decode('iso-8859-1')
         else:
@@ -262,43 +262,19 @@ class Requester(object):
         return proxies
 
     def _do_request(self, action, url, params=None, data=None, json=None, files=None, **kwargs):
+        assert url, "request url can't be blank."
         kwargs["headers"] = self._headers(kwargs.get("headers"))
         kwargs["proxies"] = self._proxies(kwargs.get("proxies"))
         if action.upper() == "GET":
-            return self.get(url, params=params, **kwargs)
-        if action.upper() == "POST":
-            return self.post(url, data=data, json=json, files=files, **kwargs)
-        if action.upper() == "PUT":
-            return self.put(url, data=data, json=json, files=files, **kwargs)
-        if action.upper() == "DELETE":
-            return self.delete(url, **kwargs)
-        if action.upper() == "OPTIONS":
-            return self.options(url, **kwargs)
-
-    @staticmethod
-    def get(url, params=None, **kwargs):
-        assert url, "request url can't be blank."
-        return requests.get(url, params=params, **kwargs)
-
-    @staticmethod
-    def post(url, data=None, json=None, **kwargs):
-        assert url, "request url can't be blank."
-        return requests.post(url, data=data, json=json, **kwargs)
-
-    @staticmethod
-    def put(url, data=None, **kwargs):
-        assert url, "request url can't be blank."
-        return requests.put(url, data=data, **kwargs)
-
-    @staticmethod
-    def delete(url, **kwargs):
-        assert url, "request url can't be blank."
-        return requests.delete(url, **kwargs)
-
-    @staticmethod
-    def options(url, **kwargs):
-        assert url, "request url can't be blank."
-        return requests.options(url, **kwargs)
+            return requests.get(url, params=params, **kwargs)
+        elif action.upper() == "POST":
+            return requests.post(url, data=data, json=json, files=files, **kwargs)
+        elif action.upper() == "PUT":
+            return requests.put(url, data=data, json=json, files=files, **kwargs)
+        elif action.upper() == "DELETE":
+            return requests.delete(url, **kwargs)
+        elif action.upper() == "OPTIONS":
+            return requests.options(url, **kwargs)
 
 
 if DEBUG:
