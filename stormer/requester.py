@@ -5,6 +5,7 @@ Created By Murray(m18527) on 2019/12/13 13:57
 """
 import json as _json
 import logging
+import os
 from collections import namedtuple
 from urllib.parse import urljoin
 
@@ -17,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 VERSION = "0.0.4"
 
-DEBUG = False
+DEBUG = os.getenv("DEBUG", False)
 
 Resp = namedtuple("Resp", ["status_code", "content", "reason"])
 

@@ -46,6 +46,6 @@ setup(
     install_requires=[
         'requests>=2.22.0',
         'redis>=3.3.11',
-        'redis-py-cluster==2.1.0'
+        'redis-py-cluster>=2.1.0'
     ],
 )
