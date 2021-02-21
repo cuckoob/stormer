@@ -11,12 +11,13 @@ from urllib.parse import urljoin
 
 import chardet
 import requests
+from urllib3 import encode_multipart_formdata
 
 from .redis_utils import get_redis_cache
 
 logger = logging.getLogger(__name__)
 
-VERSION = "0.1.1"
+VERSION = "0.1.2"
 
 DEBUG = os.getenv("DEBUG", False)
 
@@ -203,16 +204,22 @@ class Requester(object):
         return url
 
     def _bind_func(self, pre_url, action, timeout=0):
-        def req(path_params=None, params=None, data=None, json=None, files=None, **kwargs):
+        def req(path_params=None, params=None, data=None, json=None, files=None, forms=None, **kwargs):
             url = self._path_url(pre_url, path_params)
             params_hash, resp_result = None, None
             if self.cache and timeout > 0:
                 params_hash = self.build_params_hash(url, params, **kwargs)
                 resp_result = RespResult.from_cache(params_hash, action, self.cache)
             if not resp_result:
-                resp = self._do_request(action, url, params, data, json, files, **kwargs)
+                resp = self._do_request(
+                    action=action, url=url, params=params, data=data, json=json,
+                    files=files, forms=forms, **kwargs
+                )
                 resp_result = RespResult(
-                    resp, url, action, redis_cache=self.cache, params_hash=params_hash, encoding=self.encoding)
+                    response=resp, url=url, action=action,
+                    redis_cache=self.cache, params_hash=params_hash,
+                    encoding=self.encoding
+                )
                 resp_result.set_cache(timeout)
             return resp_result
 
@@ -264,10 +271,20 @@ class Requester(object):
             proxies = self.proxies
         return proxies
 
-    def _do_request(self, action, url, params=None, data=None, json=None, files=None, **kwargs):
+    def _do_request(self, action, url, params=None, data=None, json=None, files=None, forms=None, **kwargs):
         assert url, "request url can't be blank."
         kwargs["headers"] = self._headers(kwargs.get("headers"))
         kwargs["proxies"] = self._proxies(kwargs.get("proxies"))
+        if isinstance(forms, dict):
+            if isinstance(data, dict):
+                forms.update(data)
+            encode_data = encode_multipart_formdata(forms)
+            data = encode_data[0]
+            if isinstance(kwargs["headers"], dict):
+                kwargs["headers"]["Content-Type"] = encode_data[1]
+            else:
+                kwargs["headers"] = {"Content-Type": encode_data[1]}
+
         if action.upper() == "GET":
             return requests.get(url, params=params, **kwargs)
         elif action.upper() == "POST":
